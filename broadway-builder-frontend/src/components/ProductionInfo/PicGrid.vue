@@ -15,7 +15,9 @@
             <footer class="card-footer">
               <div class="card-footer-item">
                 <a v-on:click="viewCarousel(production.ProductionID)">Pictures</a> |
-                <a>Program</a>
+                <a
+                  :href="'https://api.broadwaybuilder.xyz/Programs/Production'+production.ProductionID+'/'+production.ProductionID+'.pdf'"
+                >Program</a>
               </div>
             </footer>
           </div>
@@ -23,7 +25,7 @@
       </v-layout>
     </v-container>
 
-    <a v-if="viewPix === true" v-on:click="viewPix=false">Back</a>
+    <div class="button is-primary" v-if="viewPix === true" v-on:click="viewPix=false">Back</div>
     <v-gallery v-if="viewPix === true" type="carousel" :images="pics"></v-gallery>
   </div>
 </template>

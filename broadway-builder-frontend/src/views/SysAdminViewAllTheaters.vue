@@ -25,6 +25,9 @@
                 ></read-more>
               </v-card-title>
             </v-card>
+            <button class="button" v-on:click="deleteTheater(theater)"> DELETE THEATER </button>
+            <button class="button" v-on:click="editTheater()"> EDIT THEATER </button>
+            <EditTheaterTryAgain v-if="theaterEdited === true" v-bind:ID="theater.TheaterID"/>
           </v-flex>
         </v-layout>
       </v-container>
@@ -34,6 +37,7 @@
 
 <script>
 //import TheaterProfile from "@/views/TheaterProfile.vue";
+import EditTheaterTryAgain from "@/components/Admin/EditTheaterTryAgain.vue";
 import axios from "axios";
 import Vue from "vue";
 import ReadMore from "vue-read-more";
@@ -41,12 +45,14 @@ import SearchBar from "@/components/SearchBar.vue";
 Vue.use(ReadMore);
 
 export default {
-  name: "ViewAllTheaters",
+  name: "SysAdminViewAllTheaters",
   components: {
-    SearchBar
+    SearchBar,
+    EditTheaterTryAgain
   },
   data() {
     return {
+      theaterEdited: false,
       theaters: []
     };
   },
@@ -55,9 +61,18 @@ export default {
       this.$router.push({
         name: "theater",
         params: {
-          theater: theater
+          TheaterName: theater.TheaterName,
+          Theater: theater
         }
       });
+    },
+    editTheater() {
+      this.theaterEdited = !this.theaterEdited;
+    },
+    async deleteTheater(theater) {
+      await axios
+        .delete("https://api.broadwaybuilder.xyz/theater/deleteTheater", {data: theater})
+        .then(response => {console.log(response)});
     }
   },
   async mounted() {

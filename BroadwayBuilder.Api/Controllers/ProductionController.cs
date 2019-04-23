@@ -147,7 +147,7 @@ namespace BroadwayBuilder.Api.Controllers
 
         [Route("getProductions")]
         [HttpGet]
-        public IHttpActionResult GetProductions(DateTime? currentDate = null, DateTime? previousDate = null, int? theaterID = null)
+        public IHttpActionResult GetProductions(DateTime? currentDate = null, DateTime? previousDate = null, int? theaterID = null, int pageNum = 1, int pageSize = 10)
         {
             try
             {
@@ -159,7 +159,7 @@ namespace BroadwayBuilder.Api.Controllers
                     {
                         if (previousDate != null) {
 
-                            var productionResponses = productionService.GetProductionsByPreviousDate((DateTime)previousDate, theaterID)
+                            var productionResponses = productionService.GetProductionsByPreviousDate((DateTime)previousDate, theaterID, pageNum, pageSize)
                                 .Select(production => new ProductionResponseModel()
                                 {
                                     DirectorFirstName = production.DirectorFirstName,
@@ -184,7 +184,7 @@ namespace BroadwayBuilder.Api.Controllers
                         }
                         else if (currentDate != null)
                         {
-                            var productionResponses = productionService.GetProductionsByCurrentAndFutureDate((DateTime)currentDate)
+                            var productionResponses = productionService.GetProductionsByCurrentAndFutureDate((DateTime)currentDate, theaterID, pageNum, pageSize)
                                 .Select(production => new ProductionResponseModel()
                                 {
                                     City = production.City,
@@ -224,6 +224,7 @@ namespace BroadwayBuilder.Api.Controllers
             }
         }
 
+        // Todo: Possibly make them send you the production id
         [Route("update")]
         [HttpPut]
         public IHttpActionResult UpdateProduction([FromBody] Production production_to_update)
@@ -238,9 +239,9 @@ namespace BroadwayBuilder.Api.Controllers
                     {
                         return BadRequest("no production object provided");
                     }
-                    else if (production_to_update.ProductionID == null)
+                    else if (production_to_update.ProductionID == 0)
                     {
-                        return BadRequest("Production id is null");
+                        return BadRequest("Production id was not sent");
                     }
 
 
@@ -250,18 +251,20 @@ namespace BroadwayBuilder.Api.Controllers
                     return Ok(updated_production);
 
                 }
-                // Hack: Need to add proper exception handling
+                // Catching all exceptions and returning to user
                 catch (Exception e)
                 {
-                    return BadRequest();
+                    return BadRequest(e.Message);
+
+                    // Add logging
                 }
             }
 
         }
 
-        [Route("delete")]
+        [Route("delete/{productionid}")]
         [HttpDelete]
-        public IHttpActionResult deleteProduction(Production productionToDelete)
+        public IHttpActionResult deleteProduction(int productionid)
         {
             using (var dbcontext = new BroadwayBuilderContext())
             {
@@ -269,16 +272,7 @@ namespace BroadwayBuilder.Api.Controllers
 
                 try
                 {
-                    if (productionToDelete == null)
-                    {
-                        return BadRequest("no production object provided");
-                    }
-                    else if (productionToDelete.ProductionID == null)
-                    {
-                        return BadRequest("Production id is null");
-                    }
-
-                    productionService.DeleteProduction(productionToDelete);
+                    productionService.DeleteProduction(productionid);
                     dbcontext.SaveChanges();
 
                     return Ok("Production deleted succesfully");

@@ -2,12 +2,23 @@
   <div>
     <div class="columns" v-for="(job, index) in filteredValues" v-bind:key="index">
       <!-- This coloumn just displays a brief description for the job posting -->
-      <div class="column is-6">
+      <div class="column is-12">
         <div class="card">
           <header class="card-header">
             <p class="card-header-title">
-              <strong id="Title">{{ job.Title }}</strong>
+              <input class="input" type="text" v-model="job.Title" v-if="job.edit">
+              <strong id="Title" v-else>{{ job.Title }}</strong>
             </p>
+            <a
+              v-on:click="job.show = false; job.edit = false"
+              v-if="job.show"
+              class="card-header-icon"
+              aria-label="more options"
+            >
+              <span class="icon">
+                <FontAwesomeIcon icon="times"/>
+              </span>
+            </a>
           </header>
           <div class="card-content">
             <div class="content">
@@ -19,59 +30,44 @@
                 <u>{{ job.Position }}</u>
                 <br>
               </p>
-              <strong>Description</strong>
-              <p id="Description">{{ job.Description }}</p>
-              <em id="DatePosted">
-                Posted
-                <strong>{{ calculateDateDifference(job.DateCreated) }}</strong> day(s) ago
-              </em>
             </div>
-            <div class="content"></div>
-          </div>
-          <footer class="card-footer">
-            <a class="card-footer-item" v-on:click="job.show = !job.show">View</a>
-          </footer>
-        </div>
-      </div>
-
-      <!-- This column shows additional information about the job posting -->
-      <div class="column is-6">
-        <div class="card" v-if="job.show">
-          <header class="card-header">
-            <p class="card-header-title">
-              <input class="input" type="text" v-model="job.Title" v-if="job.edit">
-              <strong id="Title" v-else>{{ job.Title }}</strong>
-            </p>
-            <a
-              v-on:click="job.show = false"
-              v-if="!job.edit"
-              class="card-header-icon"
-              aria-label="more options"
-            >
-              <span class="icon">
-                <FontAwesomeIcon icon="times"/>
-              </span>
-            </a>
-          </header>
-          <div class="card-content">
+            <!-- Job Description -->
             <div class="content">
               <strong>Description</strong>
               <textarea class="textarea" v-model="job.Description" v-if="job.edit"></textarea>
-              <p id="Description" v-else>{{ job.Description }}</p>
+              <p
+                v-else-if="!job.edit && !job.show"
+              >{{ formatLongText(job.Description, maxTextLength, textTail) }}</p>
+              <p v-if="job.show">{{ job.Description }}</p>
             </div>
-            <div class="content">
+            <!-- Job Hours -->
+            <div class="content" v-if="job.show">
               <strong>Hours</strong>
               <textarea class="textarea" v-model="job.Hours" v-if="job.edit"></textarea>
               <p id="Hours" v-else>{{ job.Hours }}</p>
             </div>
-            <div class="content">
+            <!-- Job Requirements -->
+            <div class="content" v-if="job.show">
               <strong>Requirements</strong>
               <textarea class="textarea" v-model="job.Requirements" v-if="job.edit"></textarea>
               <p id="Requirements" v-else>{{ job.Requirements }}</p>
             </div>
+            <!-- Job Date Created -->
+            <em id="DatePosted">
+              Posted
+              <strong>{{ calculateDateDifference(job.DateCreated) }}</strong> day(s) ago
+            </em>
           </div>
-
-          <footer class="card-footer" v-if="hasPermission">
+          <!-- Card options for interacting with a job -->
+          <footer class="card-footer" v-if="!job.show">
+            <a class="card-footer-item" v-on:click="job.show = true">View More Info</a>
+            <a
+              class="card-footer-item"
+              v-if="permission"
+              v-on:click="viewResumes = true; helpWantedId = job.HelpWantedId"
+            >View Applicants</a>
+          </footer>
+          <footer class="card-footer" v-if="permission && job.show">
             <a class="card-footer-item" v-if="!job.edit" v-on:click="editJobPosting(job)">Edit</a>
             <a
               class="card-footer-item"
@@ -81,28 +77,49 @@
             <a
               class="card-footer-item"
               v-if="!job.edit"
-              v-on:click="removeJobPosting(job, index)"
+              v-on:click="deleteConfirmation = true; helpWantedId = job.HelpWantedId; jobIndex = index"
             >Delete</a>
           </footer>
-          <footer class="card-footer" v-else>
-            <a class="card-footer-item">Accept Job</a>
+          <footer class="card-footer" v-else-if="!permission && job.show">
+            <a class="card-footer-item" v-on:click="uploadResume()">Apply</a>
           </footer>
         </div>
       </div>
+
+      <ResumeModal v-if="viewResumes" :helpWantedId="helpWantedId" @cancel="viewResumes = false"/>
+      <DeleteJobModal
+        v-if="deleteConfirmation"
+        @cancel="deleteConfirmation = false"
+        @confirmation="removeJobPosting(helpWantedId, jobIndex); deleteConfirmation = false"
+      />
     </div>
   </div>
 </template>
 
 <script>
 import axios from "axios";
+import ResumeModal from "@/views/HelpWanted/ResumeModal";
+import DeleteJobModal from "@/views/HelpWanted/DeleteConfirmationModal";
 
 export default {
-  props: ["jobPostings", "hasPermission", "filters"],
+  props: ["jobPostings", "hasPermission", "filters", "file"],
+  components: {
+    ResumeModal,
+    DeleteJobModal
+  },
   data() {
     return {
       categories: ["Description", "Hours", "Requirements"],
+      maxTextLength: 340,
+      textTail: "...",
       jobs: this.jobPostings,
-      jobFilters: this.filters
+      jobFilters: this.filters,
+      permission: this.hasPermission,
+      deleteConfirmation: false,
+      viewResumes: false,
+      helpWantedId: 0,
+      jobIndex: 0,
+      userid: 1
     };
   },
   computed: {
@@ -117,6 +134,19 @@ export default {
     }
   },
   methods: {
+    formatLongText(text, length, tail) {
+      // Create new div element
+      var node = document.createElement("div");
+      // Add the text to the newly created div element
+      node.innerHTML = text;
+      // Get the text content to be potentially modified
+      var content = node.textContent;
+      // If the content length is too long slice it and append a tail to the text
+      // Else, just return the content unmodified
+      return content.length > length
+        ? content.slice(0, length) + tail
+        : content;
+    },
     editJobPosting(job) {
       job.edit = true;
     },
@@ -133,25 +163,46 @@ export default {
           Requirements: job.Requirements,
           JobType: job.JobType
         })
-        .then(response => console.log("Job Updated!", response));
+        .then(alert("Job Posting Updated!"));
 
       job.edit = false;
     },
-    async removeJobPosting(job, index) {
+    async removeJobPosting(helpWantedId, index) {
       // Removes a job posting from the database
       await axios
         .delete(
           "https://api.broadwaybuilder.xyz/helpwanted/deletetheaterjob/" +
-            job.HelpWantedId
+            helpWantedId
         )
         .then(
           this.jobPostings.splice(index, 1),
-          this.$emit("removed", this.jobPostings),
-          (job.show = false)
+          this.$emit("removed", this.jobPostings)
         );
     },
     showDetails(job) {
       job.show = true;
+    },
+    async uploadResume() {
+      if (this.fileName === "") {
+        alert("Please enter a resume...");
+      } else {
+        let formData = new FormData();
+        formData.append(this.file.name, this.file);
+        await axios
+          .put(
+            "https://api.broadwaybuilder.xyz/helpwanted/" +
+              this.userid +
+              "/uploadresume",
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data"
+              }
+            }
+          )
+          .then(response => alert(response.data))
+          .catch(error => alert(error));
+      }
     },
     calculateDateDifference(datePosted) {
       var dateCreated = new Date(Date.parse(datePosted));
@@ -171,10 +222,14 @@ export default {
 <style lang="sass" scoped>
 @import '../../../node_modules/bulma/bulma.sass'
 
+nav
+  background-image: white
+  font-family: 'Roboto'
+
 .card    
   margin: 1.25em 0 1.25em 0
   box-shadow: 0 14px 75px rgba(0,0,0,0.19), 0 10px 10px rgba(0,0,0,0.22)
-  transition: all 0.5s ease 0s;
+  transition: all 0.5s ease 0s; 
 
 .card-header-icon
   color: #6F0000
@@ -187,8 +242,17 @@ export default {
   font-weight: bold
   color: #6F0000
 
+acceptJob:hover
+  font-weight: normal
+  text-decoration: none
+  transition: none
+
+
 a 
   color: #6F0000
+
+#shortDescription
+  margin-bottom: 100px
 
 #Title
   font-size: 20px

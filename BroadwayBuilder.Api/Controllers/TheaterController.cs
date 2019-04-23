@@ -24,6 +24,10 @@ namespace BroadwayBuilder.Api.Controllers
 
                 try
                 {
+                    if (theater.TheaterName == null)
+                    {
+                        throw new Exception();
+                    }
                     theaterService.CreateTheater(theater);
                     dbcontext.SaveChanges();
 
@@ -33,7 +37,7 @@ namespace BroadwayBuilder.Api.Controllers
                 // Todo: add proper error handling
                 catch (Exception e)
                 {
-                    return Content((HttpStatusCode)400,e.Message);
+                    return Content((HttpStatusCode)400, "Must provide a Theater Name");
                 }
 
             }
@@ -104,6 +108,44 @@ namespace BroadwayBuilder.Api.Controllers
             }
         }
 
+        [HttpGet, Route("ptheater/all")]
+        public IHttpActionResult GetAllTheatersPagination(int currentPage, int numberOfItems)
+        {
+            using (var dbcontext = new BroadwayBuilderContext())
+            {
+                TheaterService service = new TheaterService(dbcontext);
+                try
+                {
+                    IEnumerable list = service.GetAllTheatersPagination(currentPage,numberOfItems);
+                    return Content((HttpStatusCode)200, list);
+                }
+                catch (Exception e)
+                {
+                    return Content((HttpStatusCode)500, "Oops! Something went wrong on our end");
+                }
+
+
+            }
+        }
+
+        [HttpGet,Route("length")]
+        public IHttpActionResult GetTheaterCount()
+        {
+            using(var dbcontext = new BroadwayBuilderContext())
+            {
+                try
+                {
+                    var theaterService = new TheaterService(dbcontext);
+                    int count = theaterService.GetTheaterCount();
+                    return Content((HttpStatusCode)200, count);
+                }
+                catch (Exception e)
+                {
+                    return Content((HttpStatusCode)500, "Unable to get count of job postings for theater " + e.Message);
+                }
+            }
+        } 
+
         [HttpPut,Route("theater/updateTheater")]
         public IHttpActionResult UpdateTheater([FromBody] Theater theater)
         {
@@ -112,8 +154,15 @@ namespace BroadwayBuilder.Api.Controllers
                 try
                 {
                     var theaterService = new TheaterService(dbcontext);
-                    theaterService.UpdateTheater(theater);
-                    dbcontext.SaveChanges();
+                    var updatedTheater = theaterService.UpdateTheater(theater);
+                    if (updatedTheater != null)
+                    {
+                        dbcontext.SaveChanges();
+                    }
+                    else
+                    {
+                        throw new Exception();
+                    }
                     return Content((HttpStatusCode)200, theater);
                 }
                 catch
