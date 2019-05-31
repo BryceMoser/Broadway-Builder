@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Web.Hosting;
 using ServiceLayer.Exceptions;
+using System.Configuration;
 
 namespace ServiceLayer.Services
 {
@@ -23,15 +24,27 @@ namespace ServiceLayer.Services
 
         public void CreateProduction(Production production)
         {
+            if (!_dbContext.Theaters.Where(o => o.TheaterID == production.TheaterID).Any())
+            {
+                throw new NullNotFoundException($"Theater does not exist! with id: {production.TheaterID}");
+            }
             _dbContext.Productions.Add(production);
+
         }
 
         public Production GetProduction(int productionId)
         {
-            return _dbContext.Productions
+           var productionByIdQuery = _dbContext.Productions
                 .Where(o => o.ProductionID == productionId)
                 //.Include(o => o.ProductionDateTime) //  Only Needed if lazy loading is off and you need to get the production date times
-                .FirstOrDefault(); //if item doesn't exist it returns null Todo: throw a specific exception
+                .FirstOrDefault();
+
+            if (productionByIdQuery != null)
+            {
+                return productionByIdQuery;
+            }
+                throw new ProductionNotFoundException($"Production does not exist! with id: {productionId}");
+
         }
 
         // Returns a list of productions by a previous date. 
@@ -85,8 +98,7 @@ namespace ServiceLayer.Services
         {
             Production currentProduction = _dbContext.Productions
                  .Where(o => o.ProductionID == production.ProductionID)
-                 .FirstOrDefault(); //gives you first production that satisfies the where. 
-                //if item doesn't exist it returns null Todo: throw a specific exception
+                 .FirstOrDefault(); // Gives you first production that satisfies the where.
 
             if (currentProduction != null)
             {
@@ -98,66 +110,112 @@ namespace ServiceLayer.Services
                 currentProduction.StateProvince = production.StateProvince;
                 currentProduction.Country = production.Country;
                 currentProduction.Zipcode = production.Zipcode;
-            } else
-            {
-                throw new ProductionNotFoundException($"Production does not exist! with id: {production.ProductionID}");
-            }
 
-            return currentProduction;
+                return currentProduction;
+
+            }
+            throw new ProductionNotFoundException($"Production does not exist! with id: {production.ProductionID}");
         }
 
 
-        public void DeleteProduction(int productionid)
+        public void DeleteProduction(int productionID)
         {
             Production productionToDelete = _dbContext.Productions
-                .Where(o => o.ProductionID == productionid)
+                .Where(o => o.ProductionID == productionID)
                 .FirstOrDefault(); //gives you first production that satisfies the where
-                //if item doesn't exist it returns null Todo: throw a specific exception
+                //if item doesn't exist it returns null
 
-            // If the production found is not null, delete the production
             if (productionToDelete != null)
             {
                 _dbContext.Productions.Remove(productionToDelete);
             }
             else
             {
-                //throw an exception
+                throw new ProductionNotFoundException($"Production does not exist! with ID: {productionID}");
             }
         }
 
-        public void UploadProgram(int productionId, string extension, HttpPostedFile postedFile)
+        public void SaveProgram(int productionId, HttpPostedFileBase postedFile)
         {
-            var filePath = HostingEnvironment.MapPath("~/Programs/Production" + productionId + "/" + productionId + extension);
-            //check if prodid exists in database because we dont store data for things that don't exist by getting it and check if that variable is null. if it is null then it doesnt exist
-            //
-            var subdir = HostingEnvironment.MapPath("~/Programs/Production" + productionId);
+
+            /*
+             * When using a Virtual Directory
+             */
+            //var filePath = HostingEnvironment.MapPath("~/Programs/Production" + productionId + "/" + productionId + extension);
+            //var subdir = HostingEnvironment.MapPath("~/Programs/Production" + productionId);
+            //var dir = HostingEnvironment.MapPath("~/Programs/");
+
+            var extension = Path.GetExtension(postedFile.FileName);
+
+            var currentDirectory = ConfigurationManager.AppSettings["FileDir"];
+
+            var dir = Path.Combine(currentDirectory, "Programs/");
+            var subdir = Path.Combine(dir, $"Production{productionId}/");
+            var filePath = Path.Combine(subdir, $"{productionId}{extension}");
+
+            // If production does not exist then we will not save a program
+            if (!_dbContext.Productions.Where(o => o.ProductionID == productionId).Any())
+            {
+                throw new ProductionNotFoundException($"Production does not exist! with id: {productionId}");
+            }
+
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
 
             if (!Directory.Exists(subdir))
             {
                 Directory.CreateDirectory(subdir);
             }
-          
+
             postedFile.SaveAs(filePath);
         }
 
-        public void UploadPhoto(int productionId, int count, string extension, HttpPostedFile postedFile)
+        public void SavePhoto(int productionId, HttpPostedFileBase postedFile)
         {
-            var filePath = HostingEnvironment.MapPath("~/Photos/Production" + productionId + "/" + count + extension);
+           
+           /*
+            * When using a Virtual Directory
+            */
+            //var filePath = HostingEnvironment.MapPath("~/Photos/Production" + productionId + "/" + count + extension);
+            //var currentDirectory = Directory.GetCurrentDirectory();
+            //var subdir = HostingEnvironment.MapPath("~/Photos/Production" + productionId);
 
-            //var filePath = HostingEnvironment.MapPath("~/ProductionPhotos/" + productionId + "-" + count + extension);
-            //postedFile.SaveAs(filePath);
+            var extension = Path.GetExtension(postedFile.FileName);
 
-            var subdir = HostingEnvironment.MapPath("~/Photos/Production" + productionId);
+            var currentDirectory = ConfigurationManager.AppSettings["FileDir"];
+
+            var dir = Path.Combine(currentDirectory, "Photos/");
+            var subdir = Path.Combine(dir, $"Production{productionId}/");
+
+            // If production does not exist then we will not save the photos
+            if (!_dbContext.Productions.Where(o => o.ProductionID == productionId).Any())
+            {
+                throw new ProductionNotFoundException($"Production does not exist! with id: {productionId}");
+            }
 
             if (!Directory.Exists(subdir))
             {
                 Directory.CreateDirectory(subdir);
             }
+
+            var fileCount = Directory.GetFiles(subdir).Count();
+
+            var filePath = Path.Combine(subdir, $"{productionId}-{fileCount}{extension}");
+
+ 
+
             postedFile.SaveAs(filePath);
         }
 
-        public void CreateProductionDateTime(ProductionDateTime productionDateTime)
+        public void CreateProductionDateTime(int productionId, ProductionDateTime productionDateTime)
         {
+            if (!_dbContext.Productions.Where(o => o.ProductionID == productionId).Any())
+            {
+                throw new ProductionNotFoundException($"Production does not exist! with id: {productionId}");
+            }
+
             _dbContext.ProductionDateTimes.Add(productionDateTime);
         }
 
@@ -173,7 +231,7 @@ namespace ServiceLayer.Services
                 currentProductionDateTime.Time = productionDateTime.Time;
             } else
             {
-                //throw an exception
+                throw new ProductionDateTimeNotFoundException($"Production Date Time does not exist! with ID: {productionDateTime.ProductionDateTimeId}");
             }
 
             return currentProductionDateTime;
@@ -185,16 +243,14 @@ namespace ServiceLayer.Services
             ProductionDateTime productionDateTimeToDelete = _dbContext.ProductionDateTimes
                 .Where(o => o.ProductionDateTimeId == productionDateTime.ProductionDateTimeId)
                 .FirstOrDefault();//gives you first production date time that satisfies the where
-                                  //if item doesn't exist it returns null Todo: throw a specific exception
 
-            // If the production date time found is not null, delete the production
             if (productionDateTimeToDelete != null)
             {
                 _dbContext.ProductionDateTimes.Remove(productionDateTimeToDelete);
             }
             else
             {
-                //throw an exception
+                throw new ProductionDateTimeNotFoundException($"Production Date Time does not exist! with ID: {productionDateTime.ProductionDateTimeId}");
             }
 
         }

@@ -12,12 +12,27 @@ using ServiceLayer;
 using DataAccessLayer;
 using ServiceLayer.Services;
 using BroadwayBuilder.Api.Models;
+using System.Text;
+using System.ComponentModel;
+using Swashbuckle.Swagger.Annotations;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Data.Entity.Infrastructure;
 
 namespace BroadwayBuilder.Api.Controllers
 {
     [RoutePrefix("production")]
     public class ProductionController : ApiController
     {
+        /// <summary>
+        /// Sends file to be uploaded to the server filesystem.
+        /// </summary>
+        /// <remarks>
+        /// Before sending file to be uploaded it validates the file for 
+        /// valid extension, valid file size, and valid file amount.
+        /// </remarks>
+        /// <param name="productionId"> The unique production's ID is used to upload that file to the corresponding production.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "A message stating if pdf was uploaded succesfully or an error message if something went wrong.")]
         [Route("{productionId}/uploadProgram")]
         [HttpPut]
         public IHttpActionResult UploadProductionProgram(int productionId)
@@ -25,128 +40,141 @@ namespace BroadwayBuilder.Api.Controllers
             var dbcontext = new BroadwayBuilderContext();
             var productionService = new ProductionService(dbcontext);
 
-            //try to upload pdf and save to server filesystem
+            // Try to upload pdf and save to server filesystem
             try
             {
-                //get the content, headers, etc the full request of the current http request
+                // Get the full request of the current http request
                 var httpRequest = HttpContext.Current.Request;
+                var fileCollection = httpRequest.Files;
 
-                //A list in case we want to accept more than one file type
-                IList<string> AllowedFileExtension = new List<string> { ".pdf" };
+                var fileValidator = new FileValidator();
 
-                // Todo: Check if length of httpRequest.Files == 1 to ensure only 1 file is uploaded
-
-                // Max file size is 1MB
                 int MaxContentLength = 1024 * 1024 * 1;
+                int maxFileCount = 1;
+                var extensions = new List<string>() { ".pdf" };
 
-                foreach (string filename in httpRequest.Files)
+                // Validate files for valid extension, and size
+                var validationResult = fileValidator.ValidateFiles(fileCollection, extensions, MaxContentLength, maxFileCount);
+
+                if (!validationResult.ValidationSuccessful)
                 {
-                    // Grab current file of the request
-                    var putFile = httpRequest.Files[filename];
-
-                    // Continue if the file has content
-                    if (putFile != null && putFile.ContentLength > 0)
-                    {
-                        // Checks the current extension of the current file
-                        var ext = putFile.FileName.Substring(putFile.FileName.LastIndexOf('.'));
-                        var extension = ext.ToLower();
-
-                        // File extension is not valid
-                        if (!AllowedFileExtension.Contains(extension))
-                        {
-                            //var message = string.Format("Please Upload image of type .pdf only");
-                            // Todo: Log the error that occurs
-                            return BadRequest("File needs to be of type pdf");
-                        }
-                        // File size is too big
-                        else if (putFile.ContentLength > MaxContentLength)
-                        {
-                            //var message = string.Format("Please Upload a file upto 1 mb.");
-                            // Todo: log the error that occurs
-                            return BadRequest("File exceeds max limit of 1 MB");
-                        }
-                        // Send to production service where functinality to save the file is
-                        else
-                        {
-                            // check if id is null or not then proceed
-                            productionService.UploadProgram(productionId, extension, putFile);
-
-                        }
-                    }
-
-                    // Todo: Create an ErrorMessage model
-                    //var message1 = string.Format("Image Updated Successfully.");
-                    //return Created(insert path);
-                    //return Created("C:\\Users\\ProductionPrograms");
-                    return Ok("Pdf Uploaded");
+                    var errorMessage = string.Join("\n", validationResult.Reasons);
+                    return BadRequest(errorMessage);
                 }
-                // Todo: Create an ErrorMessage model
-                //var res = string.Format("Please Upload an image.");
-                // Todo: log the error that occurs
-                return BadRequest("Please upload an image");
+
+                // Send file to be saved to server
+                foreach (string filename in fileCollection)
+                {
+                    HttpPostedFileBase putFile = new HttpPostedFileWrapper(fileCollection[filename]);
+
+
+                    productionService.SaveProgram(productionId, putFile);
+                }
+
+                return Ok("Pdf Uploaded");
+
             }
-            catch (Exception ex) {
-                // Todo: add proper error handling
-                // Todo: log error
-                return BadRequest("Was not able to upload the image");
+            catch (Exception e) { // Todo: log error
+                // Todo: add proper error handling in production service
+                return BadRequest(e.Message);
 
             }
         }
 
+        /// <summary>
+        /// Creates a production.
+        /// </summary>
+        /// <param name="production"> The production object</param>
         [Route("create")]
         [HttpPost]
+        [SwaggerResponse(HttpStatusCode.OK, "The production created and its url.", typeof(Production))]
         public IHttpActionResult CreateProduction([FromBody] Production production)
         {
-
-            using (var dbcontext = new BroadwayBuilderContext())
+            try
             {
-                var productionService = new ProductionService(dbcontext);
-
-                try
+                using (var dbcontext = new BroadwayBuilderContext())
                 {
-                    productionService.CreateProduction(production);
-                    dbcontext.SaveChanges();
+                    var productionService = new ProductionService(dbcontext);
 
-                    // Todo: Turn this into Created(201) once the get endpoint is done so we can return the url to get the item that was just created
-                    return Ok("production created");
+                        productionService.CreateProduction(production);
+                        dbcontext.SaveChanges();
 
+                    var productionUrl = Url.Link("GetProductionById", new { productionId = production.ProductionID });
+
+                    return Created(productionUrl, new ProductionResponseModel()
+                    {
+                        ProductionID = production.ProductionID,
+                        DirectorFirstName = production.DirectorFirstName,
+                        DirectorLastName = production.DirectorLastName,
+                        ProductionName = production.ProductionName,
+                        Street = production.Street,
+                        City = production.City,
+                        StateProvince = production.StateProvince,
+                        Country = production.Country,
+                        TheaterID = production.TheaterID
+                    });
                 }
-                // Todo: add proper error handling
-                catch (Exception e)
-                {
-                    return BadRequest();
-                }
-
+            }
+            catch (DbUpdateException e)
+            {
+                return Content((HttpStatusCode)500, e.Message);
+            }
+            // Todo: add proper error handling
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
             }
 
         }
 
-
-        [Route("{productionId}")]
+        /// <summary>
+        /// Gets a production by its ID.
+        /// </summary>
+        /// <param name="productionId">The unique production ID</param>
+        [SwaggerResponse(HttpStatusCode.OK, "The production object that matches the ID.", typeof(Production))]
+        [Route("{productionId}", Name = "GetProductionById")]
         [HttpGet]
         public IHttpActionResult GetProductionById(int productionId)
         {
-            using (var dbcontext = new BroadwayBuilderContext())
-
+            try
             {
-                var productionService = new ProductionService(dbcontext);
+                using (var dbcontext = new BroadwayBuilderContext())
 
-                try
                 {
-                    Production current_production = productionService.GetProduction(productionId);
+                    var productionService = new ProductionService(dbcontext);
 
-                    return Ok(current_production);
+                        Production current_production = productionService.GetProduction(productionId);
+
+                        return Ok(current_production);
                 }
-                // Hack: Need to add proper exception handling
-                catch (Exception e)
-                {
-                    return BadRequest();
-                }
+            }
+            catch(DbUpdateException e)
+            {
+                return InternalServerError(e);
+            }
+            // Catching all exceptions
+            catch (Exception e) // Todo: log error
+            {
+                return BadRequest(e.Message);
             }
         }
 
+        /// <summary>
+        /// Gets all productions before a previous date or after a current date.
+        /// </summary>
+        /// <remarks>
+        /// Both dates cannot be null. Either a previous date or current date must be provided.
+        /// In addition, if a theater ID is sent it will return productions that correspond only to that theater ID.
+        /// The default page number is set to 1. The default page size is set to 10.
+        /// </remarks>
+        /// <param name="currentDate">Optional: The current date.</param>
+        /// <param name="previousDate">Optional: Any previous date.</param>
+        /// <param name="theaterID">Optional: The unique thater ID.</param>
+        /// <param name="pageNum">The specific page wanted.</param>
+        /// <param name="pageSize">The amount of production objects wanted per page.</param>
         [Route("getProductions")]
         [HttpGet]
+        [SwaggerResponse(HttpStatusCode.OK, "A list of Productions.", typeof(List<ProductionResponseModel>))]
         public IHttpActionResult GetProductions(DateTime? currentDate = null, DateTime? previousDate = null, int? theaterID = null, int pageNum = 1, int pageSize = 10)
         {
             try
@@ -155,11 +183,9 @@ namespace BroadwayBuilder.Api.Controllers
                 {
                     var productionService = new ProductionService(dbcontext);
 
-                    try
-                    {
-                        if (previousDate != null) {
+                        if (previousDate != null || currentDate == null) {
 
-                            var productionResponses = productionService.GetProductionsByPreviousDate((DateTime)previousDate, theaterID, pageNum, pageSize)
+                            var productionResponses = productionService.GetProductionsByPreviousDate((DateTime)previousDate, theaterID,  pageNum, pageSize)
                                 .Select(production => new ProductionResponseModel()
                                 {
                                     DirectorFirstName = production.DirectorFirstName,
@@ -182,7 +208,7 @@ namespace BroadwayBuilder.Api.Controllers
 
                             return Ok(productionResponses);
                         }
-                        else if (currentDate != null)
+                        else 
                         {
                             var productionResponses = productionService.GetProductionsByCurrentAndFutureDate((DateTime)currentDate, theaterID, pageNum, pageSize)
                                 .Select(production => new ProductionResponseModel()
@@ -208,84 +234,103 @@ namespace BroadwayBuilder.Api.Controllers
                             return Ok(productionResponses);
                         }
 
-                        // none of the if conditions were met therfore...
-                        return BadRequest("PreviousDate and Current date were both null");
-                    }
-                    // Todo: Add proper exception handling for getting a production
-                    catch (Exception e)
-                    {
-                        return BadRequest();
-                    }
                 }
             }
-            catch (Exception e) // Todo: Catch a SqlException ... or Sqlconnection exception?
+            catch (DbUpdateException e) // Todo: Log Error
             {
-                return BadRequest("Something big went bad!");
+                return Content((HttpStatusCode)500, e.Message);
+            }
+            // Todo: Add proper exception handling for getting a production
+            catch (Exception e) // Todo: Log Error Might not catch this since okay with returning [] emtpy list
+            {
+                return BadRequest();
             }
         }
 
-        // Todo: Possibly make them send you the production id
+        /// <summary>
+        /// Updates a production object that matches in the database.
+        /// </summary>
+        /// <param name="production_to_update"> The production object to update.</param>
         [Route("update")]
         [HttpPut]
+        [SwaggerResponse(HttpStatusCode.OK, "The updated production object.", typeof(Production))]
         public IHttpActionResult UpdateProduction([FromBody] Production production_to_update)
         {
-            using (var dbcontext = new BroadwayBuilderContext())
+            try
             {
-                var productionService = new ProductionService(dbcontext);
-
-                try
+                using (var dbcontext = new BroadwayBuilderContext())
                 {
-                    if (production_to_update == null)
-                    {
-                        return BadRequest("no production object provided");
-                    }
-                    else if (production_to_update.ProductionID == 0)
-                    {
-                        return BadRequest("Production id was not sent");
-                    }
+                    var productionService = new ProductionService(dbcontext);
+
+                        if (production_to_update == null)
+                        {
+                            return BadRequest("No production object provided");
+                        }
+                        else if (production_to_update.ProductionID == 0)
+                        {
+                            return BadRequest("Production id was not sent");
+                        }
 
 
-                    Production updated_production = productionService.UpdateProduction(production_to_update);
-                    dbcontext.SaveChanges();
+                        Production updated_production = productionService.UpdateProduction(production_to_update);
+                        dbcontext.SaveChanges();
 
-                    return Ok(updated_production);
-
+                        return Ok(updated_production);
                 }
-                // Catching all exceptions and returning to user
-                catch (Exception e)
-                {
-                    return BadRequest(e.Message);
-
-                    // Add logging
-                }
+            }
+            catch (DbUpdateException e)
+            {
+                return Content((HttpStatusCode)500, e.Message);
+            }
+            // Catching all general exceptions and returning to user
+            catch (Exception e)  // Todo: Log error
+            {
+                return BadRequest(e.Message);
             }
 
         }
 
+        /// <summary>
+        /// Deletes the production object that matches the ID from the database.
+        /// </summary>
+        /// <param name="productionid">The unique production ID.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "A string status")]
         [Route("delete/{productionid}")]
         [HttpDelete]
         public IHttpActionResult deleteProduction(int productionid)
         {
-            using (var dbcontext = new BroadwayBuilderContext())
+            try
             {
-                var productionService = new ProductionService(dbcontext);
-
-                try
+                using (var dbcontext = new BroadwayBuilderContext())
                 {
-                    productionService.DeleteProduction(productionid);
-                    dbcontext.SaveChanges();
+                    var productionService = new ProductionService(dbcontext);
+
+                        productionService.DeleteProduction(productionid);
+                        dbcontext.SaveChanges();
 
                     return Ok("Production deleted succesfully");
-
-                }
-                // Hack: Need to add proper exception handling
-                catch (Exception e)
-                {
-                    return BadRequest();
                 }
             }
+            catch (DbUpdateException e)
+            {
+                return Content((HttpStatusCode)500, e.Message);
+            }
+            catch (Exception e) // Todo: Log error
+            {
+                return BadRequest(e.Message);
+            }
+
         }
 
+        /// <summary>
+        /// Sends each file to be saved onto the server's file system.
+        /// </summary>
+        /// <remarks>
+        /// Before sending file to be uploaded it validates the file for 
+        /// valid extension, valid file size, and valid file amount.
+        /// </remarks>
+        /// <param name="productionId">The unique productions ID. Used to relate photos to the corresponding production.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "A string status message.")]
         [Route("{productionId}/uploadPhoto")]
         [HttpPost]
         public IHttpActionResult uploadPhoto(int productionId)
@@ -298,83 +343,61 @@ namespace BroadwayBuilder.Api.Controllers
             {
                 //get the content, headers, etc the full request of the current http request
                 var httpRequest = HttpContext.Current.Request;
-               
+                var fileCollection = httpRequest.Files;
 
-                // Todo: Check if length of httpRequest.Files <= 10 to ensure only 10 photos is uploaded
+                var fileValidator = new FileValidator();
 
-                // A list in case we want to accept more than one file type
-                IList<string> AllowedFileExtension = new List<string> { ".jpg" };
-
-                // Max file size is 1MB
                 int MaxContentLength = 1 * 1024 * 1024 * 5; //Size = 5 MB
+                var validExtensions = new List<string>() {".jpg"};
+                int maxFileCount = 5;
 
-                var count = 0;
+                var validationResult = fileValidator.ValidateFiles(fileCollection, validExtensions, MaxContentLength, maxFileCount);
 
+                if (!validationResult.ValidationSuccessful)
+                {
+                    var errorMessage = string.Join("\n", validationResult.Reasons);
+                    return BadRequest(errorMessage);
+                }
+
+                // Used for loop since foreach did not handle cycling through multiple files well.
                 for (int i= 0; i < httpRequest.Files.Count; i++)
                 {
                     // Grab current file of the request
-                    //var putFile = httpRequest.Files[filename];
-                    var putFile = httpRequest.Files[i];
-
-                    // Continue if the file has content
-                    if (putFile != null && putFile.ContentLength > 0)
-                    {
-
-                        // Checks the current extension of the current file
-                        var ext = putFile.FileName.Substring(putFile.FileName.LastIndexOf('.'));
-                        var extension = ext.ToLower();
-
-                        // File extension is not valid
-                        if (!AllowedFileExtension.Contains(extension))
-                        {
-
-                            //var message = string.Format("Please Upload image of type .jpg only");
-                            // Todo: Log the error that occurs
-                            return BadRequest("Please upload image of type .jpg only");
-                        }
-                        // File size is too big
-                        else if (putFile.ContentLength > MaxContentLength)
-                        {
-
-                            //var message = string.Format("Please Upload a file upto 1 mb.");
-
-                            // Todo: log the error that occurs
-                            return BadRequest("Please upload a file upto 1mb");
-                        }
-                        // Send to production service where functinality to save the file is
-                        else
-                        {
-                            productionService.UploadPhoto(productionId, count, extension, putFile);
-                        }
-                    }
-
-                    count++;
+                    HttpPostedFileBase putFile = new HttpPostedFileWrapper(httpRequest.Files[i]);
+                    
+                   // Send to production service where functinality to save the file is                        
+                   productionService.SavePhoto(productionId, putFile);
+                   
                 }
 
                 return Ok("Photo Uploaded");
             }
 
-            catch (Exception ex)
+            catch (Exception ex) // Todo: log error
             {
-                // Todo: add proper error handling
-                // Todo: log error
-                return BadRequest("Photo could not be uploaded...dont know why.find out and add detailed message here!");
-
+                return BadRequest(ex.Message);
             }
         }
 
+        /// <summary>
+        /// Gets a list of photos urls pertaining to the specified production ID.
+        /// </summary>
+        /// <param name="productionId">The unique production ID.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "A list of file urls", typeof(List<string>))]
         [Route("{productionId}/getPhotos")]
         [HttpGet]
-        public IHttpActionResult getPhotos(int productionId)
+        public IHttpActionResult GetPhotos(int productionId)
         {
-            
-            // Virtual Directory path
-            var filepath = HostingEnvironment.MapPath("~/Photos/Production" + productionId);
 
-            // Grabbing information about the directory at this path. Todo: Look into changing to using Directory rather than DirectoryInfo
-            DirectoryInfo dir = new DirectoryInfo(filepath);
+            var currentDirectory = ConfigurationManager.AppSettings["FileDir"];
 
-            FileInfo[] filepaths = dir.GetFiles();
+            var dir = Path.Combine(currentDirectory, "Photos/");
+            var subdir = Path.Combine(dir, $"Production{productionId}/");
+
+            // Grabbing information about the directory at this path.
+            DirectoryInfo direc = new DirectoryInfo(subdir);
+
+            FileInfo[] filepaths = direc.GetFiles();
 
             var filenames = new List<string>();
             // Grab each files name and put it into a list 
@@ -393,43 +416,51 @@ namespace BroadwayBuilder.Api.Controllers
             return Ok(fileUrls);
         }
 
+        ///// <summary>
+        ///// Creates an object pertaining the a specific date and time for the production matching the production ID.
+        ///// </summary>
+        ///// <param name="productionId">The unique production ID.</param>
+        ///// <param name="productionDateTime">The production Date Time object that will be attached to the production matching the ID.</param>
+        ///// <returns>The production Date time object that was succesfully created.</returns>
+        [SwaggerResponse(HttpStatusCode.OK, "The production date time created and its url.", typeof(ProductionDateTime))]
         [Route("{productionId}/create")]
         [HttpPost]
-        public IHttpActionResult createProductionDateTime(int productionId, [FromBody] ProductionDateTime productionDateTime )
+        public IHttpActionResult CreateProductionDateTime(int productionId, [FromBody] ProductionDateTime productionDateTime)
         {
             try
             {
-                using(var dbcontext = new BroadwayBuilderContext())
+                using (var dbcontext = new BroadwayBuilderContext())
                 {
                     var productionService = new ProductionService(dbcontext);
-
-                    try
-                    {
+                   
                         if (productionDateTime == null)
                         {
                             return BadRequest("no production date time object provided");
                         }
 
                         productionDateTime.ProductionID = productionId;
-                        productionService.CreateProductionDateTime(productionDateTime);
+                        productionService.CreateProductionDateTime(productionId,productionDateTime);
                         dbcontext.SaveChanges();
 
-                        // Todo: Change this to a 201 Created(insert url of resource) once get productiondate time route is created
-                        return Ok(productionDateTime);
-                    }
-                    catch (Exception e)
-                    {
-                        return BadRequest();
-                    }
+                        return Ok("Production Date and time have been added!");                  
                 }
             }
-            catch (Exception e )
+            catch (DbUpdateException e)
             {
-                return BadRequest("Something went wrong!");
+                return Content((HttpStatusCode)500, e.Message);
             }
-
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
+            }
         }
 
+        /// <summary>
+        /// Updates either the date or time of a Production Date Time object that matches the production date time ID.
+        /// </summary>
+        /// <param name="productionDateTimeId">The unique production date time ID.</param>
+        /// <param name="productionDateTime">The date and time attribute of the object.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "The updated production date time", typeof(ProductionDateTime))]
         [Route("{productionDateTimeID}")]
         [HttpPut]
         public IHttpActionResult updateProductionDateTime(int productionDateTimeId, [FromBody] ProductionDateTime productionDateTime)
@@ -440,8 +471,6 @@ namespace BroadwayBuilder.Api.Controllers
                 {
                     var productionService = new ProductionService(dbContext);
 
-                    try
-                    {
                         if (productionDateTime == null)
                         {
                             return BadRequest("no date time was provided");
@@ -453,21 +482,25 @@ namespace BroadwayBuilder.Api.Controllers
                         dbContext.SaveChanges();
 
                         return Ok(updatedProductionDateTime);
-                    }
-                    catch (Exception e)
-                    {
-                        // If none of those if statements were met and we couldnt update a production...
-                        return BadRequest();
-                    }
                 }
             }
+            catch (DbUpdateException e)
+            {
+                return Content((HttpStatusCode)500, e.Message);
+            }
+
             catch (Exception e)
             {
-                // Todo: add proper error response when requet fails due to not being able to create dbcontext...
-                return BadRequest("Something bad happend!");
+                return BadRequest(e.Message);
             }
         }
 
+        /// <summary>
+        /// Delete a production date time object that corresponds to the ID.
+        /// </summary>
+        /// <param name="productionDateTimeid">The unique production date time ID.</param>
+        /// <param name="productionDateTimeToDelete">The production date time object to delete.</param>
+        [SwaggerResponse(HttpStatusCode.OK, "A string status")]
         [Route("{productionDateTimeId}")]
         [HttpDelete]
         public IHttpActionResult deleteProductiondateTime(int productionDateTimeid, ProductionDateTime productionDateTimeToDelete)
@@ -478,30 +511,25 @@ namespace BroadwayBuilder.Api.Controllers
                 {
                     var productionService = new ProductionService(dbcontext);
 
-                    try
+                    if (productionDateTimeToDelete == null)
                     {
-                        if (productionDateTimeToDelete == null)
-                        {
-                            return BadRequest("no production date time object provided");
-                        }
-
-                        productionService.DeleteProductionDateTime(productionDateTimeToDelete);
-                        dbcontext.SaveChanges();
-                        return Ok("Production date time deleted succesfully!");
-
+                        return BadRequest("no production date time object provided");
                     }
-                    catch (Exception e)
-                    {
-                        // Todo: Catch a specific error so you can tell send a specific response model stating why a production date time was not able to be deleted
-                        return BadRequest("Was not able to delete production date time because.....");
-                    }
+
+                    productionService.DeleteProductionDateTime(productionDateTimeToDelete);
+                    dbcontext.SaveChanges();
+                    return Ok("Production date time deleted succesfully!");
                 }
+            }
+            catch (DbUpdateException e)
+            {
+                return Content((HttpStatusCode)500, e.Message);
             }
             catch (Exception e)
             {
-                // Todo: User proper error handling responses catch  a more specific error
-                return BadRequest("Major error happened!"); 
+                return BadRequest(e.Message);
             }
         }
+
     }
 }

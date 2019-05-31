@@ -1,5 +1,7 @@
 ﻿using DataAccessLayer;
+using ServiceLayer.Exceptions;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -37,6 +39,7 @@ namespace ServiceLayer.Services
         /// <param name="user">The user that we want to create</param>
         public void CreateUser(User user)
         {
+            user.DateCreated = DateTime.Now;
             _dbContext.Users.Add(user);
         }
 
@@ -47,17 +50,50 @@ namespace ServiceLayer.Services
         /// <returns>The user that was obtained using the username</returns>
         public User GetUser(string username)
         {
-            return _dbContext.Users.Find(username);
+            var user = _dbContext.Users
+                .Where(o => o.Username == username)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                throw new UserNotFoundException($"User with email {username} not found");
+            }
+
+            return user;
         }
 
         public User GetUser(int id)
         {
-            return _dbContext.Users.Find(id);
+            var user = _dbContext.Users
+                .Where(o => o.UserId == id)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                throw new UserNotFoundException($"User with id {id} not found");
+            }
+
+            return user;
         }
 
         public User GetUser(User user)
         {
             return _dbContext.Users.Find(user.UserId);
+        }
+
+        public User GetUserByToken(string token)
+        {
+            var user = _dbContext.Sessions
+                .Where(o => o.Token == token)
+                .Select(o => o.User)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                throw new UserNotFoundException($"User with token {token} not found");
+            }
+
+            return user;
         }
 
         /// <summary>
@@ -74,10 +110,11 @@ namespace ServiceLayer.Services
             {
                 userToUpdate.FirstName = user.FirstName;
                 userToUpdate.LastName = user.LastName;
+                userToUpdate.StreetAddress = user.StreetAddress;
                 userToUpdate.StateProvince = user.StateProvince;
                 userToUpdate.Country = user.Country;
                 userToUpdate.City = user.City;
-                userToUpdate.isEnabled = user.isEnabled;
+                userToUpdate.IsEnabled = user.IsEnabled;
             }
             return userToUpdate;
 
@@ -119,7 +156,7 @@ namespace ServiceLayer.Services
             User UserToEnable = _dbContext.Users.Find(user.UserId);
             if (UserToEnable != null)
             {
-                UserToEnable.isEnabled = true;
+                UserToEnable.IsEnabled = true;
             }
             return UserToEnable;
         }
@@ -134,7 +171,7 @@ namespace ServiceLayer.Services
             User UserToDisable = _dbContext.Users.Find(user.UserId);
             if (UserToDisable != null)
             {
-                UserToDisable.isEnabled = false;
+                UserToDisable.IsEnabled = false;
             }
             return UserToDisable;
         }
@@ -144,15 +181,29 @@ namespace ServiceLayer.Services
         /// Adds a permission to a specific user.
         /// </summary>
         /// <param name="user">The user who we will be adding a permission to</param>
-        /// <param name="permission">The permission we will be adding to a user</param>
-        public void AddUserPermission(User user, Permission permission,Theater theater)
+        /// <param name="role">The permission we will be adding to a user</param>
+        public void AddUserRole(int userId, DataAccessLayer.Enums.RoleEnum role)
         {
-            _dbContext.UserPermissions.Add(new UserPermission(user.UserId, permission.PermissionID, theater.TheaterID, true));
+            _dbContext.UserRoles.Add(new UserRole()
+            {
+                UserId = userId,
+                RoleId = role,
+                IsEnabled = true,
+                DateCreated = DateTime.UtcNow,
+            });
         }
 
-        public UserPermission GetUserPermission(User user, Permission permission, Theater theater)
+        public List<DataAccessLayer.Enums.RoleEnum> GetUserRoles(int userId)
         {
-            return _dbContext.UserPermissions.Find(user.UserId, permission.PermissionID, theater.TheaterID); 
+            return _dbContext.UserRoles
+                .Where(o => o.UserId == userId)
+                .Select(o => o.RoleId)
+                .ToList();
+        }
+
+        public bool HasUserRole(int userId, DataAccessLayer.Enums.RoleEnum role)
+        {
+            return _dbContext.UserRoles.Where(o => o.UserId == userId && o.RoleId == role).Any();
         }
 
         /// <summary>
@@ -161,13 +212,30 @@ namespace ServiceLayer.Services
         /// </summary>
         /// <param name="user">The user whos permission we want to remove</param>
         /// <param name="permission">The permission to be removed from the user</param>
-        public void DeleteUserPermission(UserPermission userPermission)
+        public void DeleteUserRole(UserRole userRole)
         {
-            UserPermission permissionToDelete = _dbContext.UserPermissions.Find(userPermission.UserId,userPermission.PermissionID,userPermission.TheaterID);
-            if (permissionToDelete != null)
+            UserRole roleToDelete = _dbContext.UserRoles.Find(userRole.UserId, userRole.RoleId);
+            if (roleToDelete != null)
             {
-                _dbContext.UserPermissions.Remove(permissionToDelete);
+                _dbContext.UserRoles.Remove(roleToDelete);
             }
+        }
+
+        public IQueryable<User> GetAllUsers()
+        {
+            return _dbContext.Users;
+        }
+
+        public void RemoveUserRole(int userId, DataAccessLayer.Enums.RoleEnum role)
+        {
+            var userRoleEntity = _dbContext.UserRoles
+                .Where(o => o.UserId == userId && o.RoleId == role)
+                .FirstOrDefault();
+
+            if (userRoleEntity != null)
+            {
+                _dbContext.UserRoles.Remove(userRoleEntity);
+            }         
         }
     }
 }

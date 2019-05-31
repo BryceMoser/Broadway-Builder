@@ -12,23 +12,28 @@ namespace DataAccessLayer
     public class TheaterJobPosting
     {
         [Key]
-        //[DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        //[Column(Order = 2)]
         public int HelpWantedID { get; set; }
-        //[Required]
+        [Required]
         public DateTime DateCreated { get; set; }
         [Required]
+        [StringLength(20)]
         public string Position { get; set; }
         [Required]
+        [StringLength(3000)]
         public string Description { get; set; }
         [Required]
+        [StringLength(70)]
         public string Title { get; set; }
         [Required]
+        [StringLength(20)]
         public string Hours { get; set; }
         [Required]
+        [StringLength(1500)]
         public string Requirements { get; set; }
         [Required]
+        [StringLength(20)]
         public string JobType { get; set; }
+        [Required]
         public int TheaterID { get; set; }
         public Theater theater { get; set; }
 
@@ -36,7 +41,6 @@ namespace DataAccessLayer
 
         public TheaterJobPosting( int theaterID, string position, string description, string title, string hour, string requirement, string jobtype)
         {
-            //this.HelpWantedID = Guid.NewGuid();
             this.TheaterID = theaterID;
             this.Position = position;
             this.Description = description;
@@ -47,11 +51,7 @@ namespace DataAccessLayer
         }
         public TheaterJobPosting()
         {
-            this.Position = "";
-            this.Description = "";
-            this.Title = "";
-            this.Hours = "";
-            this.Requirements = "";
+
         }
     }
 }

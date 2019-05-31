@@ -1,93 +1,73 @@
 <template>
-  <div id="app">
-    <nav class="navbar is-danger" role="navigation" aria-label="main navigation">
-      <div class="navbar-brand">
-        <a
-          role="button"
-          class="navbar-burger burger"
-          aria-label="menu"
-          aria-expanded="false"
-          data-target="navbarBasicExample"
-        >
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-        </a>
-      </div>
+  <div>
+    <!-- The entire navbar options and dropdown menu (navigation hamburger) -->
+    <v-toolbar class="hidden-sm-and-down" style="padding: 0 10em; color: white; background: linear-gradient(to right, #6F0000, #000);">
+      <v-toolbar-title>Broadway Builder</v-toolbar-title>
+      <v-spacer></v-spacer>
+      <!-- Displays the links that route to other pages -->
+      <v-toolbar-items v-for="(route, index) in pageRoutes" :key="index">
+        <v-btn :to="route.link" flat  v-if="route.show">
+          <span class="color-white">
+            {{ route.title }}
+          </span>
+        </v-btn>
+      </v-toolbar-items>
+    </v-toolbar>
 
-      <div id="navbarBasicExample" class="navbar-menu">
-        <div class="navbar-start">
-          <router-link to="/" class="navbar-item">Broadway Builder</router-link>
-        </div>
+    <v-toolbar class="hidden-md-and-up" style="padding: 0 0em; color: white; background: linear-gradient(to right, #6F0000, #000);">
+      <v-toolbar-title>Broadway Builder</v-toolbar-title>
+      <v-spacer></v-spacer>
 
-        <div class="navbar-end">
-          <router-link to="/" class="navbar-item">Home</router-link>
-          <router-link to="/theaters" class="navbar-item">Theatres</router-link>
-          <router-link to="/adminaccount/{userID}" class="navbar-item">Account</router-link>
-          <div class="navbar-item">
-            <div class="buttons">
-              <a class="button is-light">Login / Register</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </nav>
-    <router-view/>
+      <!-- When on a smaller screen, a navigation hamburger will show up -->
+      <v-menu class="hidden-md-and-up" transition="slide-y-transition" bottom left>
+        <!-- Shows the hamburger icon when on a small screen -->
+        <template v-slot:activator="{ on }">
+          <v-toolbar-side-icon v-on="on" right style="color: white;"></v-toolbar-side-icon>
+        </template>
+        <!-- Using the list of destinations, display and route to the page link -->
+        <v-list v-for="(route, index) in pageRoutes" :key="index">
+          <v-list-tile v-if="route.show">
+            <v-btn :to="route.link" flat block>
+              <span class="color-black">
+                {{ route.title }}
+              </span>
+            </v-btn>
+          </v-list-tile>
+        </v-list>
+      </v-menu>
+    </v-toolbar>
   </div>
 </template>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  // Get all "navbar-burger" elements
-  const $navbarBurgers = Array.prototype.slice.call(
-    document.querySelectorAll(".navbar-burger"),
-    0
-  );
+import { mapState } from 'vuex'
 
-  // Check if there are any navbar burgers
-  if ($navbarBurgers.length > 0) {
-    // Add a click event on each of them
-    $navbarBurgers.forEach(el => {
-      el.addEventListener("click", () => {
-        // Get the target from the "data-target" attribute
-        const target = el.dataset.target;
-        const $target = document.getElementById(target);
-
-        // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
-        el.classList.toggle("is-active");
-        $target.classList.toggle("is-active");
-      });
-    });
-  }
-});
 export default {
   data: function() {
     return {
-      isOpen: false
     };
-  }
+  },
+  computed: mapState({
+    pageRoutes: state => [
+      { title: "Home", link: "/", show: true },
+      { title: "Theaters", link: "/theaters", show: true },
+      { title: "Account", link: "/sysadminaccount/{userID}", show: state.isSysAdmin },
+      { title: "Account", link: "/adminaccount/{userID}", show: state.isTheaterAdmin },
+      { title: "About Us", link: "/aboutus", show: true },
+      { title: "Log out", link: "/logout", show: state.token !== null }
+    ]
+  })
 };
 </script>
 
-<style lang="sass" scoped>
-@import url('https://fonts.googleapis.com/css?family=Roboto');
+<style scoped>
+@import url("https://fonts.googleapis.com/css?family=Roboto");
 
-nav 
-  background-image: linear-gradient(to right, #6F0000, #200122)
-  font-family: 'Roboto'
-  font-weight: bold
-  font-size: 1.5em
-  color: #DEDEDE
-  
-  
-.navbar-menu
-  font-weight: normal
-  align: right
+.color-white {
+  color: white;
+}
 
-a
-  color: #000
-
-
-.buttons
-  text-shadow: 0px 0px white
+.color-black {
+  color: black;
+}
 </style>

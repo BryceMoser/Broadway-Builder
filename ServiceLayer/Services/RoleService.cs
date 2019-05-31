@@ -33,7 +33,7 @@ namespace ServiceLayer.Services
         /// </summary>
         /// <param name="role">The role we want to retrieve</param>
         /// <returns></returns>
-        public Role GetRole(int role)
+        public Role GetRole(DataAccessLayer.Enums.RoleEnum role)
         {
             return _dbContext.Roles.Find(role);
         }
@@ -52,6 +52,27 @@ namespace ServiceLayer.Services
                 _dbContext.Roles.Remove(RoleToDelete);
             }
 
+        }
+
+        public void DeleteRole(int roleId)
+        {
+
+            Role RoleToDelete = _dbContext.Roles.Find(roleId);
+            if (RoleToDelete != null)
+            {
+                _dbContext.Roles.Remove(RoleToDelete);
+            }
+
+        }
+
+        public void UpdateRole(Role role)
+        {
+            Role roleFromDb = _dbContext.Roles.Find(role.RoleID);
+            if (roleFromDb != null)
+            {
+                roleFromDb.RoleName = role.RoleName;
+                roleFromDb.isEnabled = roleFromDb.isEnabled;
+            }
         }
     }
 }

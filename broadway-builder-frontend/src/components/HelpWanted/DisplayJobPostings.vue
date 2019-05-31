@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="columns" v-for="(job, index) in filteredValues" v-bind:key="index">
+    <div class="columns" v-for="(job, index) in jobPostings" v-bind:key="index">
       <!-- This coloumn just displays a brief description for the job posting -->
       <div class="column is-12">
         <div class="card">
@@ -9,14 +9,9 @@
               <input class="input" type="text" v-model="job.Title" v-if="job.edit">
               <strong id="Title" v-else>{{ job.Title }}</strong>
             </p>
-            <a
-              v-on:click="job.show = false; job.edit = false"
-              v-if="job.show"
-              class="card-header-icon"
-              aria-label="more options"
-            >
+            <a @click="job.show = false; job.edit = false" v-if="job.show" class="card-header-icon" aria-label="more options">
               <span class="icon">
-                <FontAwesomeIcon icon="times"/>
+                <FontAwesomeIcon icon="times" />
               </span>
             </a>
           </header>
@@ -25,7 +20,7 @@
               <p id="Position">
                 <strong>Job Type: &nbsp;</strong>
                 <u>{{ job.JobType }}</u>
-                <br>
+                &nbsp;
                 <strong>Position: &nbsp;</strong>
                 <u>{{ job.Position }}</u>
                 <br>
@@ -35,10 +30,9 @@
             <div class="content">
               <strong>Description</strong>
               <textarea class="textarea" v-model="job.Description" v-if="job.edit"></textarea>
-              <p
-                v-else-if="!job.edit && !job.show"
-              >{{ formatLongText(job.Description, maxTextLength, textTail) }}</p>
-              <p v-if="job.show">{{ job.Description }}</p>
+              <p v-else-if="job.show">{{ job.Description }}</p>
+              <p v-else-if="!job.edit && !job.show">{{ formatLongText(job.Description, maxTextLength, textTail) }}</p>
+
             </div>
             <!-- Job Hours -->
             <div class="content" v-if="job.show">
@@ -60,52 +54,39 @@
           </div>
           <!-- Card options for interacting with a job -->
           <footer class="card-footer" v-if="!job.show">
-            <a class="card-footer-item" v-on:click="job.show = true">View More Info</a>
-            <a
-              class="card-footer-item"
-              v-if="permission"
-              v-on:click="viewResumes = true; helpWantedId = job.HelpWantedId"
-            >View Applicants</a>
+            <a class="card-footer-item" @click="job.show = true">View More Info</a>
+            <a class="card-footer-item" v-if="permission" @click="viewResumes = true; helpWantedId = job.HelpWantedId">View Applicants</a>
           </footer>
           <footer class="card-footer" v-if="permission && job.show">
-            <a class="card-footer-item" v-if="!job.edit" v-on:click="editJobPosting(job)">Edit</a>
-            <a
-              class="card-footer-item"
-              v-if="job.edit"
-              v-on:click="finishEditing(job)"
-            >Finish Editing</a>
-            <a
-              class="card-footer-item"
-              v-if="!job.edit"
-              v-on:click="deleteConfirmation = true; helpWantedId = job.HelpWantedId; jobIndex = index"
-            >Delete</a>
+            <a class="card-footer-item" v-if="!job.edit" @click="job.edit = true;">Edit</a>
+            <a class="card-footer-item" v-if="job.edit" @click="finishEditing(job)">Finish Editing</a>
+            <a class="card-footer-item" v-if="!job.edit" @click="deleteConfirmation = true; helpWantedId = job.HelpWantedId; jobIndex = index">Delete</a>
           </footer>
           <footer class="card-footer" v-else-if="!permission && job.show">
-            <a class="card-footer-item" v-on:click="uploadResume()">Apply</a>
+            <a class="card-footer-item" @click="applyToJob(job.HelpWantedId)">Apply</a>
           </footer>
         </div>
       </div>
-
-      <ResumeModal v-if="viewResumes" :helpWantedId="helpWantedId" @cancel="viewResumes = false"/>
-      <DeleteJobModal
-        v-if="deleteConfirmation"
-        @cancel="deleteConfirmation = false"
-        @confirmation="removeJobPosting(helpWantedId, jobIndex); deleteConfirmation = false"
-      />
+      <EditJobModal v-if="editConfirmation" :modalMessage="editModalMessage" @cancel="editConfirmation = false" />
+      <ResumeModal v-if="viewResumes" :helpWantedId="helpWantedId" @cancel="viewResumes = false" />
+      <DeleteJobModal v-if="deleteConfirmation" :helpWantedId="helpWantedId" @cancel="deleteConfirmation = false; $emit('deleteFinished');" />
     </div>
   </div>
 </template>
 
 <script>
 import axios from "axios";
-import ResumeModal from "@/views/HelpWanted/ResumeModal";
-import DeleteJobModal from "@/views/HelpWanted/DeleteConfirmationModal";
+
+import ResumeModal from "@/components/HelpWanted/ResumeModal.vue";
+import DeleteJobModal from "@/components/HelpWanted/DeleteConfirmationModal.vue";
+import EditJobModal from "@/components/HelpWanted/EditConfirmationModal.vue";
 
 export default {
-  props: ["jobPostings", "hasPermission", "filters", "file"],
+  props: ["jobPostings", "hasPermission", "file"],
   components: {
     ResumeModal,
-    DeleteJobModal
+    DeleteJobModal,
+    EditJobModal
   },
   data() {
     return {
@@ -113,26 +94,28 @@ export default {
       maxTextLength: 340,
       textTail: "...",
       jobs: this.jobPostings,
-      jobFilters: this.filters,
       permission: this.hasPermission,
       deleteConfirmation: false,
+      editConfirmation: false,
+      editConfirmationTimeout: 1000 * 3,
+      editModalMessage: "",
       viewResumes: false,
       helpWantedId: 0,
       jobIndex: 0,
       userid: 1
     };
   },
-  computed: {
-    filteredValues() {
-      if (!this.filters.length) return this.jobPostings;
+  // computed: {
+  //   filteredValues() {
+  //     if (!this.filters.length) return this.jobPostings;
 
-      return this.jobPostings.filter(
-        job =>
-          this.filters.includes(job.Position) ||
-          this.filters.includes(job.JobType)
-      );
-    }
-  },
+  //     return this.jobPostings.filter(
+  //       job =>
+  //         this.filters.includes(job.Position) ||
+  //         this.filters.includes(job.JobType)
+  //     );
+  //   }
+  // },
   methods: {
     formatLongText(text, length, tail) {
       // Create new div element
@@ -147,11 +130,8 @@ export default {
         ? content.slice(0, length) + tail
         : content;
     },
-    editJobPosting(job) {
-      job.edit = true;
-    },
-    finishEditing(job) {
-      axios
+    async finishEditing(job) {
+      await axios
         .put("https://api.broadwaybuilder.xyz/helpwanted/edittheaterjob", {
           HelpWantedId: job.HelpWantedId,
           TheaterId: job.TheaterId,
@@ -163,46 +143,30 @@ export default {
           Requirements: job.Requirements,
           JobType: job.JobType
         })
-        .then(alert("Job Posting Updated!"));
-
-      job.edit = false;
-    },
-    async removeJobPosting(helpWantedId, index) {
-      // Removes a job posting from the database
-      await axios
-        .delete(
-          "https://api.broadwaybuilder.xyz/helpwanted/deletetheaterjob/" +
-            helpWantedId
-        )
         .then(
-          this.jobPostings.splice(index, 1),
-          this.$emit("removed", this.jobPostings)
+          response => (
+            (this.editConfirmation = true),
+            (this.editModalMessage = response.data),
+            setTimeout(() => {
+              job.edit = false;
+              this.editConfirmation = false;
+            }, this.editConfirmationTimeout)
+          )
         );
     },
-    showDetails(job) {
-      job.show = true;
-    },
-    async uploadResume() {
-      if (this.fileName === "") {
-        alert("Please enter a resume...");
-      } else {
-        let formData = new FormData();
-        formData.append(this.file.name, this.file);
-        await axios
-          .put(
-            "https://api.broadwaybuilder.xyz/helpwanted/" +
-              this.userid +
-              "/uploadresume",
-            formData,
-            {
-              headers: {
-                "Content-Type": "multipart/form-data"
-              }
-            }
-          )
-          .then(response => alert(response.data))
-          .catch(error => alert(error));
-      }
+    async applyToJob(helpWantedId) {
+      await axios
+        .post("https://api.broadwaybuilder.xyz/helpwanted/userapply", 
+          undefined, {
+          headers: {
+            'Authorization': `Bearer ${this.$store.state.token}`
+          },
+          params: {
+            helpwantedid: helpWantedId
+          }
+        })
+        .then(response => alert(response.data))
+        .catch(error => alert(error));
     },
     calculateDateDifference(datePosted) {
       var dateCreated = new Date(Date.parse(datePosted));
@@ -246,7 +210,6 @@ acceptJob:hover
   font-weight: normal
   text-decoration: none
   transition: none
-
 
 a 
   color: #6F0000

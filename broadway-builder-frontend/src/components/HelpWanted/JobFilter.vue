@@ -11,7 +11,7 @@
           <strong>Type</strong>
         </h4>
         <span v-for="(job, i) in jobTypes" :key="i">
-          <input type="checkbox" :value="job.jobType" v-model="filters" @change="applyFilter">
+          <input type="checkbox" :value="job.jobType" v-model="jobTypeFilters">
           {{job.jobType}}
           <br>
         </span>
@@ -24,13 +24,15 @@
           <strong>Roles</strong>
         </h4>
         <span v-for="(role, i) in roles" :key="i">
-          <input type="checkbox" :value="role.title" v-model="filters" @change="applyFilter">
+          <input type="checkbox" :value="role.title" v-model="rolesFilters">
           {{ role.title }}
           <br>
         </span>
         <hr>
       </div>
+
     </div>
+    <a class="button is-medium" @click="applyFilter()">Submit Filters</a>
   </div>
 </template>
 
@@ -45,6 +47,7 @@ export default {
         { jobType: "Part Time" },
         { jobType: "Seasonal" }
       ],
+      jobTypeFilters: [],
       roles: [
         { title: "Actor" },
         { title: "Stagehands" },
@@ -57,18 +60,24 @@ export default {
         { title: "Usher" },
         { title: "Dresser" }
       ],
-      filters: []
+      rolesFilters: []
     };
   },
   methods: {
     applyFilter() {
-      this.$emit("filtered", this.filters);
+      this.$emit("filtered", {
+        jobTypeFilters: this.jobTypeFilters,
+        rolesFilters: this.rolesFilters
+      });
+      console.log("Filterd");
     }
   }
 };
 </script>
 
 <style lang="sass" scoped>
+@import '../../../node_modules/bulma/bulma.sass'
+
 .JobFilter
   margin-top: 1em
 

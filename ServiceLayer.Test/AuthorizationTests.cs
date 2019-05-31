@@ -20,12 +20,13 @@ namespace ServiceLayer.Test
             var lastName = "Castro";
             int age = 24;
             var dob = new DateTime(1994, 1, 7);
+            var streetAddress ="address1"; 
             var city = "San Diego";
             var stateProvince = "California";
             var country = "United States";
             var enable = true;
 
-            var user = new User(username, firstName, lastName, age, dob, city, stateProvince, country, enable);
+            var user = new User(username, firstName, lastName, age, dob, streetAddress,city, stateProvince, country, enable,Guid.NewGuid());
             var permission = new Permission("RateShow", true);
             var theater = new Theater("someTheater", "Regal", "theater st", "LA", "CA", "US", "323323");
 
@@ -40,24 +41,17 @@ namespace ServiceLayer.Test
             var permissionService = new PermissionService(broadwayBuilderContext);
 
             //Adding data into tables
-            permissionService.CreatePermission(permission);
-            broadwayBuilderContext.SaveChanges();
             userService.CreateUser(user);
-            broadwayBuilderContext.SaveChanges();
             theaterService.CreateTheater(theater);
             broadwayBuilderContext.SaveChanges();
-            userService.AddUserPermission(user, permission, theater);
+            userService.AddUserRole(user.UserId, DataAccessLayer.Enums.RoleEnum.SysAdmin);
             broadwayBuilderContext.SaveChanges();
 
 
             // Act 
-            actual = service.HasPermission(user,permission,theater);
+            actual = service.HasPermission(user, DataAccessLayer.Enums.PermissionsEnum.ActivateAbusiveAccount);
 
-            UserPermission userPermission = userService.GetUserPermission(user, permission, theater);
-            userService.DeleteUserPermission(userPermission);
-            broadwayBuilderContext.SaveChanges();
             userService.DeleteUser(user);
-            permissionService.DeletePermission(permission);
             theaterService.DeleteTheater(theater);
             broadwayBuilderContext.SaveChanges();
 
@@ -77,13 +71,13 @@ namespace ServiceLayer.Test
             var lastName = "Castro";
             int age = 24;
             var dob = new DateTime(1994, 1, 7);
+            var streetAddress = "address";
             var city = "San Diego";
             var stateProvince = "California";
             var country = "United States";
             var enable = true;
 
-            var user = new User(username, firstName, lastName, age, dob, city, stateProvince, country, enable);
-            var permission = new Permission("RateShow", true);
+            var user = new User(username, firstName, lastName, age, dob, streetAddress,city, stateProvince, country, enable,Guid.NewGuid());
             var theater = new Theater("someTheater", "Regal", "theater st", "LA", "CA", "US", "323323");
 
             BroadwayBuilderContext broadwayBuilderContext = new BroadwayBuilderContext();
@@ -97,20 +91,17 @@ namespace ServiceLayer.Test
             var permissionService = new PermissionService(broadwayBuilderContext);
             var theaterService = new TheaterService(broadwayBuilderContext);
 
-            permissionService.CreatePermission(permission);
-            broadwayBuilderContext.SaveChanges();
             theaterService.CreateTheater(theater);
-            broadwayBuilderContext.SaveChanges();
             userService.CreateUser(user);
+            broadwayBuilderContext.SaveChanges();
+            userService.AddUserRole(user.UserId, DataAccessLayer.Enums.RoleEnum.GeneralUser);
             broadwayBuilderContext.SaveChanges();
 
             // Act 
-            actual = service.HasPermission(user, permission,theater);
-
+            actual = service.HasPermission(user, DataAccessLayer.Enums.PermissionsEnum.ActivateAbusiveAccount);
             
             userService.DeleteUser(user);
             theaterService.DeleteTheater(theater);
-            permissionService.DeletePermission(permission);
             broadwayBuilderContext.SaveChanges();
 
             // Assert

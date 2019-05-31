@@ -18,21 +18,26 @@ namespace DataAccessLayer
         [Index(IsUnique =true)]
         public Guid ResumeGuid { get; set; }
 
+        [Required]
+        [Index(IsUnique = true)]
         public int UserId { get; set; }
 
+        [Required]
         public DateTime DateCreated { get; set; }
 
         public User user { get; set; }
         ICollection<ResumeTheaterJob> resumeTheaterJobs { get; set; }
-        public Resume()
-        {
-
-        }
+        
 
         public Resume(int userid,Guid resumeGuid)
         {
             this.UserId = userid;
             this.ResumeGuid = resumeGuid;
+        }
+
+        public Resume()
+        {
+
         }
     }
 }
